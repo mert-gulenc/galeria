@@ -14,8 +14,8 @@ class ImageViewerRootView: UIView, RootViewType {
     var hideBlurOverlay: Bool = false
     var hidePageIndicators: Bool = false
 
-    private var toolbarConfig: [[String: Any]] = []
-    private var onToolbarActionCallback: ((String, String?, Int) -> Void)?
+    private var headerItemsConfig: [[String: Any]] = []
+    private var onHeaderActionCallback: ((String, String?, Int) -> Void)?
 
     private var pageViewController: UIPageViewController!
     private(set) lazy var backgroundView: UIView = {
@@ -201,36 +201,44 @@ class ImageViewerRootView: UIView, RootViewType {
                 self.hideBlurOverlay = hide
             case .hidePageIndicators(let hide):
                 self.hidePageIndicators = hide
-            case .toolbar(let items, let onTap):
-                toolbarConfig = items
-                onToolbarActionCallback = onTap
+            case .headerItems(let items, let onTap):
+                headerItemsConfig = items
+                onHeaderActionCallback = onTap
                 buildNavBarRightItems()
             }
         }
     }
 
-    // Builds rightBarButtonItems from the toolbar config.
+    // Builds rightBarButtonItems from the headerItems config.
     // Items appear left→right on screen; UIKit rightBarButtonItems are stored right→left,
     // so we reverse the built array before assigning.
     private func buildNavBarRightItems() {
+        NSLog("[Galeria] buildNavBarRightItems called with %d items", headerItemsConfig.count)
         var buttons: [UIBarButtonItem] = []
 
-        for item in toolbarConfig {
+        for item in headerItemsConfig {
             guard let id = item["id"] as? String,
-                  let iconName = item["icon"] as? String else { continue }
+                  let iconName = item["icon"] as? String else {
+                NSLog("[Galeria] buildNavBarRightItems: skipping item missing id or icon: %@", item.description)
+                continue
+            }
 
             let isMenu = item["isMenu"] as? Bool ?? false
             let image = UIImage(systemName: iconName)
+            NSLog("[Galeria] buildNavBarRightItems: id=%@ icon=%@ isMenu=%d imageFound=%d", id, iconName, isMenu ? 1 : 0, image != nil ? 1 : 0)
 
             if isMenu, let rawMenuItems = item["menuItems"] as? [[String: Any]] {
+                NSLog("[Galeria] buildNavBarRightItems: building menu with %d items for id=%@", rawMenuItems.count, id)
                 let actions: [UIAction] = rawMenuItems.compactMap { m in
                     guard let mid = m["id"] as? String,
                           let label = m["label"] as? String else { return nil }
                     let icon = (m["icon"] as? String).flatMap { UIImage(systemName: $0) }
                     let attrs: UIMenuElement.Attributes =
                         (m["isDestructive"] as? Bool == true) ? .destructive : []
+                    NSLog("[Galeria] buildNavBarRightItems: menu action id=%@ label=%@", mid, label)
                     return UIAction(title: label, image: icon, attributes: attrs) { [weak self] _ in
-                        self?.onToolbarActionCallback?(id, mid, self?.currentIndex ?? 0)
+                        NSLog("[Galeria] UIAction fired: buttonId=%@ menuItemId=%@ index=%d", id, mid, self?.currentIndex ?? 0)
+                        self?.onHeaderActionCallback?(id, mid, self?.currentIndex ?? 0)
                     }
                 }
                 // UIBarButtonItem(image:menu:) doesn't present menus reliably in a
@@ -242,6 +250,7 @@ class ImageViewerRootView: UIView, RootViewType {
                 button.menu = UIMenu(children: actions)
                 button.showsMenuAsPrimaryAction = true
                 button.frame = CGRect(x: 0, y: 0, width: 44, height: 44)
+                NSLog("[Galeria] buildNavBarRightItems: created UIButton with menu for id=%@, frame=%@", id, NSCoder.string(for: button.frame))
                 buttons.append(UIBarButtonItem(customView: button))
             } else {
                 let btn = UIBarButtonItem(
@@ -256,13 +265,15 @@ class ImageViewerRootView: UIView, RootViewType {
             }
         }
 
+        NSLog("[Galeria] buildNavBarRightItems: setting %d rightBarButtonItems", buttons.count)
         // Reverse so the first item in the prop array appears leftmost on screen
         navItem.rightBarButtonItems = buttons.reversed()
     }
 
     @objc private func navBarItemTapped(_ sender: UIBarButtonItem) {
         guard let id = sender.accessibilityIdentifier else { return }
-        onToolbarActionCallback?(id, nil, currentIndex)
+        NSLog("[Galeria] navBarItemTapped: id=%@ index=%d", id, currentIndex)
+        onHeaderActionCallback?(id, nil, currentIndex)
     }
 
     private func setupGestures() {
@@ -335,7 +346,10 @@ extension ImageViewerRootView: UIGestureRecognizerDelegate {
         // Don't intercept taps that land on the nav bar — lets UIBarButtonItem menus fire
         if gestureRecognizer is UITapGestureRecognizer {
             let location = gestureRecognizer.location(in: self)
-            if navBar.frame.contains(location) {
+            let inNavBar = navBar.frame.contains(location)
+            NSLog("[Galeria] gestureRecognizerShouldBegin: tapGesture location=%@ navBar.frame=%@ inNavBar=%d → shouldBegin=%d",
+                  NSCoder.string(for: location), NSCoder.string(for: navBar.frame), inNavBar ? 1 : 0, inNavBar ? 0 : 1)
+            if inNavBar {
                 return false
             }
         }
@@ -352,7 +366,10 @@ extension ImageViewerRootView: UIGestureRecognizerDelegate {
         // Reject touches that hit the nav bar so bar buttons and custom button menus fire
         if gestureRecognizer is UITapGestureRecognizer {
             let location = touch.location(in: self)
-            if navBar.frame.contains(location) {
+            let inNavBar = navBar.frame.contains(location)
+            NSLog("[Galeria] shouldReceive(touch): location=%@ navBar.frame=%@ inNavBar=%d → shouldReceive=%d",
+                  NSCoder.string(for: location), NSCoder.string(for: navBar.frame), inNavBar ? 1 : 0, inNavBar ? 0 : 1)
+            if inNavBar {
                 return false
             }
         }

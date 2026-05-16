@@ -1,7 +1,7 @@
 import { ContextType, createContext } from 'react'
 import type { Image } from 'react-native'
 import type { SFSymbol } from 'sf-symbols-typescript'
-import type { GaleriaToolbarItem } from './Galeria.types'
+import type { GaleriaHeaderItem } from './Galeria.types'
 
 type ImageSource = string | Parameters<typeof Image.resolveAssetSource>[0]
 
@@ -23,7 +23,7 @@ export const GaleriaContext = createContext({
   src: '',
   hideBlurOverlay: false,
   hidePageIndicators: false,
-  toolbar: undefined as GaleriaToolbarItem[] | undefined,
+  headerItems: undefined as GaleriaHeaderItem[] | undefined,
 })
 
 export type GaleriaContext = ContextType<typeof GaleriaContext>

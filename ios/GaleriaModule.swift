@@ -8,7 +8,7 @@ public class GaleriaModule: Module {
       Events("onIndexChange", "onLongPress")
       Events("onIndexChange", "onPressRightNavItemIcon")
       Events("onIndexChange", "onDismiss")
-      Events("onToolbarAction")
+      Events("onHeaderAction")
 
       OnViewDidUpdateProps { (view) in
         view.setupImageView()
@@ -40,8 +40,8 @@ public class GaleriaModule: Module {
         view.hidePageIndicators = hidePageIndicators ?? false
       }
 
-      Prop("toolbar") { (view: GaleriaView, toolbar: [[String: Any]]?) in
-        view.toolbar = toolbar
+      Prop("headerItems") { (view: GaleriaView, headerItems: [[String: Any]]?) in
+        view.headerItems = headerItems
       }
 
     }

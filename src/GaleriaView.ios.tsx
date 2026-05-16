@@ -6,47 +6,47 @@ import type { SFSymbol } from 'sf-symbols-typescript'
 import { GaleriaContext } from './context'
 import {
   GaleriaIndexChangedEvent,
-  GaleriaToolbarActionEvent,
-  GaleriaToolbarItem,
+  GaleriaHeaderActionEvent,
+  GaleriaHeaderItem,
   GaleriaViewProps,
 } from './Galeria.types'
 
-type NativeToolbarMenuItem = {
+type NativeHeaderMenuItem = {
   id: string
   label: string
   icon?: string
   isDestructive: boolean
 }
 
-type NativeToolbarItem = {
+type NativeHeaderItem = {
   id: string
   icon: string
   label?: string
   isMenu: boolean
-  menuItems?: NativeToolbarMenuItem[]
+  menuItems?: NativeHeaderMenuItem[]
 }
 
 const NativeImage = requireNativeView<
-  Omit<GaleriaViewProps, 'toolbar' | 'onToolbarAction'> & {
+  Omit<GaleriaViewProps, 'headerItems' | 'onHeaderAction'> & {
     urls?: string[]
     closeIconName?: SFSymbol
     theme: 'dark' | 'light'
     onIndexChange?: (event: GaleriaIndexChangedEvent) => void
-    onToolbarAction?: (event: GaleriaToolbarActionEvent) => void
+    onHeaderAction?: (event: GaleriaHeaderActionEvent) => void
     hideBlurOverlay?: boolean
     hidePageIndicators?: boolean
-    toolbar?: NativeToolbarItem[]
+    headerItems?: NativeHeaderItem[]
   }
 >('Galeria')
 
 const noop = () => {}
 
-function stripCallbacks(toolbar: GaleriaToolbarItem[]): {
-  nativeToolbar: NativeToolbarItem[]
+function stripCallbacks(headerItems: GaleriaHeaderItem[]): {
+  nativeItems: NativeHeaderItem[]
   callbacks: Record<string, (currentIndex: number) => void>
 } {
   const callbacks: Record<string, (currentIndex: number) => void> = {}
-  const nativeToolbar: NativeToolbarItem[] = toolbar.map((item) => {
+  const nativeItems: NativeHeaderItem[] = headerItems.map((item) => {
     if (item.action) callbacks[item.id] = item.action
     return {
       id: item.id,
@@ -64,7 +64,7 @@ function stripCallbacks(toolbar: GaleriaToolbarItem[]): {
       }),
     }
   })
-  return { nativeToolbar, callbacks }
+  return { nativeItems, callbacks }
 }
 
 const Galeria = Object.assign(
@@ -76,7 +76,7 @@ const Galeria = Object.assign(
     ids,
     hideBlurOverlay = false,
     hidePageIndicators = false,
-    toolbar,
+    headerItems,
   }: {
     children: React.ReactNode
   } & Partial<
@@ -88,7 +88,7 @@ const Galeria = Object.assign(
       | 'closeIconName'
       | 'hideBlurOverlay'
       | 'hidePageIndicators'
-      | 'toolbar'
+      | 'headerItems'
     >
   >) {
     return (
@@ -104,7 +104,7 @@ const Galeria = Object.assign(
           ids,
           hideBlurOverlay,
           hidePageIndicators,
-          toolbar,
+          headerItems,
         }}
       >
         {children}
@@ -113,8 +113,8 @@ const Galeria = Object.assign(
   },
   {
     Image({
-      toolbar: _toolbarProp,
-      onToolbarAction: _onToolbarActionProp,
+      headerItems: _headerItemsProp,
+      onHeaderAction: _onHeaderActionProp,
       ...props
     }: GaleriaViewProps) {
       const {
@@ -124,27 +124,27 @@ const Galeria = Object.assign(
         closeIconName,
         hideBlurOverlay,
         hidePageIndicators,
-        toolbar,
+        headerItems,
       } = useContext(GaleriaContext)
 
       const callbacksRef = useRef<Record<string, (currentIndex: number) => void>>({})
 
-      const nativeToolbar = toolbar
+      const nativeItems = headerItems
         ? (() => {
-            const { nativeToolbar: nt, callbacks } = stripCallbacks(toolbar)
+            const { nativeItems: ni, callbacks } = stripCallbacks(headerItems)
             callbacksRef.current = callbacks
-            return nt
+            return ni
           })()
         : undefined
 
-      const handleToolbarAction = useCallback(
-        (event: GaleriaToolbarActionEvent) => {
+      const handleHeaderAction = useCallback(
+        (event: GaleriaHeaderActionEvent) => {
           const key =
             event.nativeEvent.menuItemId ?? event.nativeEvent.buttonId
           callbacksRef.current[key]?.(event.nativeEvent.currentIndex)
-          _onToolbarActionProp?.(event)
+          _onHeaderActionProp?.(event)
         },
-        [_onToolbarActionProp],
+        [_onHeaderActionProp],
       )
 
       return (
@@ -158,12 +158,11 @@ const Galeria = Object.assign(
             if (typeof url === 'string') {
               return url
             }
-
             return Image.resolveAssetSource(url).uri
           })}
           index={initialIndex}
-          toolbar={nativeToolbar}
-          onToolbarAction={handleToolbarAction}
+          headerItems={nativeItems}
+          onHeaderAction={handleHeaderAction}
           {...props}
         />
       )

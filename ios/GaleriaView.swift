@@ -52,12 +52,12 @@ class GaleriaView: ExpoView {
   var rightNavItemIconName: String?
   var hideBlurOverlay: Bool = false
   var hidePageIndicators: Bool = false
-  var toolbar: [[String: Any]]?
+  var headerItems: [[String: Any]]?
   let onPressRightNavItemIcon = EventDispatcher()
   let onIndexChange = EventDispatcher()
   let onLongPress = EventDispatcher()
   let onDismiss = EventDispatcher()
-  let onToolbarAction = EventDispatcher()
+  let onHeaderAction = EventDispatcher()
 
   public func setupImageView() {
     // Clean up previous state for Fabric view recycling (see #19)
@@ -165,14 +165,14 @@ class GaleriaView: ExpoView {
     options.append(.hideBlurOverlay(hideBlurOverlay))
     options.append(.hidePageIndicators(hidePageIndicators))
 
-    if let toolbar = toolbar {
-      options.append(.toolbar(toolbar, onTap: { [weak self] buttonId, menuItemId, index in
+    if let headerItems = headerItems {
+      options.append(.headerItems(headerItems, onTap: { [weak self] buttonId, menuItemId, index in
         var payload: [String: Any] = [
           "buttonId": buttonId,
           "currentIndex": index,
         ]
         if let mid = menuItemId { payload["menuItemId"] = mid }
-        self?.onToolbarAction(payload)
+        self?.onHeaderAction(payload)
       }))
     }
 

@@ -20,7 +20,7 @@ export type GaleriaRightNavItemPressedEvent =
   NativeSyntheticEvent<{ index: number }>
 export type GaleriaDismissEvent = NativeSyntheticEvent<Record<string, never>>
 
-export interface GaleriaToolbarMenuItem {
+export interface GaleriaHeaderMenuItem {
   id: string
   label: string
   icon?: string
@@ -28,22 +28,22 @@ export interface GaleriaToolbarMenuItem {
   action?: (currentIndex: number) => void
 }
 
-export interface GaleriaToolbarItem {
+export interface GaleriaHeaderItem {
   id: string
   icon: string
   label?: string
   isMenu?: boolean
-  menuItems?: GaleriaToolbarMenuItem[]
+  menuItems?: GaleriaHeaderMenuItem[]
   action?: (currentIndex: number) => void
 }
 
-type GaleriaToolbarActionPayload = {
+type GaleriaHeaderActionPayload = {
   buttonId: string
   menuItemId?: string
   currentIndex: number
 }
-export type GaleriaToolbarActionEvent =
-  NativeSyntheticEvent<GaleriaToolbarActionPayload>
+export type GaleriaHeaderActionEvent =
+  NativeSyntheticEvent<GaleriaHeaderActionPayload>
 
 export interface GaleriaViewProps {
   index?: number
@@ -60,8 +60,8 @@ export interface GaleriaViewProps {
   onLongPress?: (event: GaleriaLongPressEvent) => void
   onPressRightNavItemIcon?: (event: GaleriaRightNavItemPressedEvent) => void
   onDismiss?: (event: GaleriaDismissEvent) => void
-  onToolbarAction?: (event: GaleriaToolbarActionEvent) => void
+  onHeaderAction?: (event: GaleriaHeaderActionEvent) => void
   hideBlurOverlay?: boolean
   hidePageIndicators?: boolean
-  toolbar?: GaleriaToolbarItem[]
+  headerItems?: GaleriaHeaderItem[]
 }
