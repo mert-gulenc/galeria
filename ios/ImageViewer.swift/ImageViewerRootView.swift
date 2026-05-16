@@ -16,7 +16,8 @@ class ImageViewerRootView: UIView, RootViewType {
 
     private var headerItemsConfig: [[String: Any]] = []
     private var onHeaderActionCallback: ((String, String?, Int) -> Void)?
-    private var rightButtonsStack: UIStackView?
+    // Outermost container for right-side buttons (glass pill on iOS 26+, plain stack otherwise)
+    private var rightButtonsContainer: UIView?
 
     private var pageViewController: UIPageViewController!
     private(set) lazy var backgroundView: UIView = {
@@ -28,8 +29,12 @@ class ImageViewerRootView: UIView, RootViewType {
     private(set) lazy var navBar: UINavigationBar = {
         let navBar = UINavigationBar(frame: .zero)
         navBar.isTranslucent = true
-        navBar.setBackgroundImage(UIImage(), for: .default)
-        navBar.shadowImage = UIImage()
+        if #available(iOS 26, *) {
+            // iOS 26 automatically applies liquid glass — don't override the background
+        } else {
+            navBar.setBackgroundImage(UIImage(), for: .default)
+            navBar.shadowImage = UIImage()
+        }
         return navBar
     }()
 
@@ -65,20 +70,20 @@ class ImageViewerRootView: UIView, RootViewType {
 
     func willAppear(animated: Bool) {
         navBar.alpha = 0
-        rightButtonsStack?.alpha = 0
+        rightButtonsContainer?.alpha = 0
     }
 
     func didAppear(animated: Bool) {
         UIView.animate(withDuration: 0.25) {
             self.navBar.alpha = 1.0
-            self.rightButtonsStack?.alpha = 1.0
+            self.rightButtonsContainer?.alpha = 1.0
         }
     }
 
     func willDisappear(animated: Bool) {
         UIView.animate(withDuration: 0.25) {
             self.navBar.alpha = 0
-            self.rightButtonsStack?.alpha = 0
+            self.rightButtonsContainer?.alpha = 0
         }
     }
 
@@ -213,22 +218,56 @@ class ImageViewerRootView: UIView, RootViewType {
         }
     }
 
-    // Adds header action buttons as direct subviews of this view (not inside UINavigationBar).
-    // UIButton.showsMenuAsPrimaryAction requires being in a proper view hierarchy to present
-    // menus — UIBarButtonItem inside a standalone UINavigationBar doesn't satisfy that.
+    // Adds header action buttons as direct subviews (not inside UINavigationBar).
+    // On iOS 26+ wraps them in a UIGlassEffect pill for liquid glass styling.
     private func buildNavBarRightItems() {
-        rightButtonsStack?.removeFromSuperview()
-        rightButtonsStack = nil
+        rightButtonsContainer?.removeFromSuperview()
+        rightButtonsContainer = nil
 
         guard !headerItemsConfig.isEmpty else { return }
 
+        let stack = buildButtonStack()
+
+        if #available(iOS 26, *) {
+            let glassEffect = UIGlassEffect()
+            let pill = UIVisualEffectView(effect: glassEffect)
+            pill.layer.cornerRadius = 20
+            pill.layer.masksToBounds = true
+            pill.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(pill)
+            rightButtonsContainer = pill
+
+            stack.translatesAutoresizingMaskIntoConstraints = false
+            pill.contentView.addSubview(stack)
+
+            NSLayoutConstraint.activate([
+                stack.topAnchor.constraint(equalTo: pill.contentView.topAnchor),
+                stack.bottomAnchor.constraint(equalTo: pill.contentView.bottomAnchor),
+                stack.leadingAnchor.constraint(equalTo: pill.contentView.leadingAnchor, constant: 4),
+                stack.trailingAnchor.constraint(equalTo: pill.contentView.trailingAnchor, constant: -4),
+
+                pill.trailingAnchor.constraint(equalTo: safeAreaLayoutGuide.trailingAnchor, constant: -12),
+                pill.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: 4),
+                pill.heightAnchor.constraint(equalToConstant: 40),
+            ])
+        } else {
+            stack.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(stack)
+            rightButtonsContainer = stack
+
+            NSLayoutConstraint.activate([
+                stack.trailingAnchor.constraint(equalTo: safeAreaLayoutGuide.trailingAnchor, constant: -8),
+                stack.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor),
+                stack.heightAnchor.constraint(equalToConstant: 44),
+            ])
+        }
+    }
+
+    private func buildButtonStack() -> UIStackView {
         let stack = UIStackView()
         stack.axis = .horizontal
         stack.spacing = 0
         stack.alignment = .center
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
-        rightButtonsStack = stack
 
         for item in headerItemsConfig {
             guard let id = item["id"] as? String,
@@ -262,16 +301,12 @@ class ImageViewerRootView: UIView, RootViewType {
 
             stack.addArrangedSubview(button)
             NSLayoutConstraint.activate([
-                button.widthAnchor.constraint(equalToConstant: 44),
-                button.heightAnchor.constraint(equalToConstant: 44),
+                button.widthAnchor.constraint(equalToConstant: 40),
+                button.heightAnchor.constraint(equalToConstant: 40),
             ])
         }
 
-        NSLayoutConstraint.activate([
-            stack.trailingAnchor.constraint(equalTo: safeAreaLayoutGuide.trailingAnchor, constant: -8),
-            stack.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor),
-            stack.heightAnchor.constraint(equalToConstant: 44),
-        ])
+        return stack
     }
 
     @objc private func rightButtonTapped(_ sender: UIButton) {
@@ -285,6 +320,7 @@ class ImageViewerRootView: UIView, RootViewType {
 
         let singleTapGesture = UITapGestureRecognizer(target: self, action: #selector(didSingleTap))
         singleTapGesture.numberOfTapsRequired = 1
+        singleTapGesture.delegate = self  // required for gestureRecognizerShouldBegin / shouldReceive to fire
         addGestureRecognizer(singleTapGesture)
     }
 
@@ -319,7 +355,7 @@ class ImageViewerRootView: UIView, RootViewType {
         let targetAlpha: CGFloat = navBar.alpha > 0.5 ? 0.0 : 1.0
         UIView.animate(withDuration: 0.235) {
             self.navBar.alpha = targetAlpha
-            self.rightButtonsStack?.alpha = targetAlpha
+            self.rightButtonsContainer?.alpha = targetAlpha
         }
     }
 
@@ -341,7 +377,7 @@ extension ImageViewerRootView: MatchTransitionDelegate {
 
     func matchTransitionWillBegin(transition: MatchTransition) {
         navBar.alpha = 0
-        rightButtonsStack?.alpha = 0
+        rightButtonsContainer?.alpha = 0
         transition.overlayView?.isHidden = hideBlurOverlay
     }
 }
@@ -351,7 +387,7 @@ extension ImageViewerRootView: UIGestureRecognizerDelegate {
         if gestureRecognizer is UITapGestureRecognizer {
             let location = gestureRecognizer.location(in: self)
             if navBar.frame.contains(location) { return false }
-            if let stack = rightButtonsStack, stack.frame.contains(location) { return false }
+            if let container = rightButtonsContainer, container.frame.contains(location) { return false }
         }
         if let scrollView = currentScrollView {
             return scrollView.zoomScale <= scrollView.minimumZoomScale + 0.01
@@ -366,7 +402,7 @@ extension ImageViewerRootView: UIGestureRecognizerDelegate {
         if gestureRecognizer is UITapGestureRecognizer {
             let location = touch.location(in: self)
             if navBar.frame.contains(location) { return false }
-            if let stack = rightButtonsStack, stack.frame.contains(location) { return false }
+            if let container = rightButtonsContainer, container.frame.contains(location) { return false }
         }
         return true
     }
