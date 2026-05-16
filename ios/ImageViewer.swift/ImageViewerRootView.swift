@@ -326,6 +326,13 @@ extension ImageViewerRootView: MatchTransitionDelegate {
 
 extension ImageViewerRootView: UIGestureRecognizerDelegate {
     override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        // Don't intercept taps that land on the nav bar — lets UIBarButtonItem menus fire
+        if gestureRecognizer is UITapGestureRecognizer {
+            let location = gestureRecognizer.location(in: self)
+            if navBar.frame.contains(location) {
+                return false
+            }
+        }
         if let scrollView = currentScrollView {
             return scrollView.zoomScale <= scrollView.minimumZoomScale + 0.01
         }
