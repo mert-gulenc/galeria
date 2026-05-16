@@ -17,13 +17,6 @@ class ImageViewerRootView: UIView, RootViewType {
     private var toolbarConfig: [[String: Any]] = []
     private var onToolbarActionCallback: ((String, String?, Int) -> Void)?
 
-    private(set) lazy var bottomToolbar: UIToolbar = {
-        let bar = UIToolbar(frame: .zero)
-        bar.isTranslucent = true
-        bar.alpha = 0
-        return bar
-    }()
-
     private var pageViewController: UIPageViewController!
     private(set) lazy var backgroundView: UIView = {
         let view = UIView()
@@ -71,20 +64,17 @@ class ImageViewerRootView: UIView, RootViewType {
 
     func willAppear(animated: Bool) {
         navBar.alpha = 0
-        bottomToolbar.alpha = 0
     }
 
     func didAppear(animated: Bool) {
         UIView.animate(withDuration: 0.25) {
             self.navBar.alpha = 1.0
-            self.bottomToolbar.alpha = 1.0
         }
     }
 
     func willDisappear(animated: Bool) {
         UIView.animate(withDuration: 0.25) {
             self.navBar.alpha = 0
-            self.bottomToolbar.alpha = 0
         }
     }
 
@@ -144,11 +134,11 @@ class ImageViewerRootView: UIView, RootViewType {
                 imageLoader: imageLoader
             )
             self.initialViewController = initialVC
-            
+
             if let sourceImage = self.sourceImage {
                 initialVC.initialPlaceholder = sourceImage
             }
-            
+
             initialVC.view.gestureRecognizers?.removeAll(where: { $0 is UIPanGestureRecognizer })
             pageViewController.setViewControllers([initialVC], direction: .forward, animated: false)
 
@@ -158,21 +148,23 @@ class ImageViewerRootView: UIView, RootViewType {
             onIndexChange?(initialIndex)
         }
 
+        // Close button: xmark icon on the LEFT
         let closeBarButton = UIBarButtonItem(
-            title: NSLocalizedString("Close", comment: "Close button title"),
+            image: UIImage(systemName: "xmark"),
             style: .plain,
             target: self,
             action: #selector(dismissViewer)
         )
         closeBarButton.tintColor = theme.tintColor
-        navItem.rightBarButtonItem = closeBarButton
+        navItem.leftBarButtonItem = closeBarButton
+
         navBar.items = [navItem]
         addSubview(navBar)
     }
 
     private func applyOptions() {
-        let closeButton = navItem.rightBarButtonItem
-        
+        let closeButton = navItem.leftBarButtonItem
+
         options.forEach { option in
             switch option {
             case .theme(let newTheme):
@@ -188,11 +180,7 @@ class ImageViewerRootView: UIView, RootViewType {
                     target: self,
                     action: #selector(didTapRightNavItem)
                 )
-                if let closeButton = closeButton {
-                    navItem.rightBarButtonItems = [closeButton, customButton]
-                } else {
-                    navItem.rightBarButtonItem = customButton
-                }
+                navItem.rightBarButtonItem = customButton
                 onRightNavBarTapped = onTap
             case .rightNavItemIcon(let icon, let onTap):
                 let customButton = UIBarButtonItem(
@@ -201,11 +189,7 @@ class ImageViewerRootView: UIView, RootViewType {
                     target: self,
                     action: #selector(didTapRightNavItem)
                 )
-                if let closeButton = closeButton {
-                    navItem.rightBarButtonItems = [closeButton, customButton]
-                } else {
-                    navItem.rightBarButtonItem = customButton
-                }
+                navItem.rightBarButtonItem = customButton
                 onRightNavBarTapped = onTap
             case .onIndexChange(let callback):
                 self.onIndexChange = callback
@@ -220,15 +204,17 @@ class ImageViewerRootView: UIView, RootViewType {
             case .toolbar(let items, let onTap):
                 toolbarConfig = items
                 onToolbarActionCallback = onTap
-                setupToolbar()
+                buildNavBarRightItems()
             }
         }
     }
 
-    private func setupToolbar() {
-        addSubview(bottomToolbar)
+    // Builds rightBarButtonItems from the toolbar config.
+    // Items appear left→right on screen; UIKit rightBarButtonItems are stored right→left,
+    // so we reverse the built array before assigning.
+    private func buildNavBarRightItems() {
+        var buttons: [UIBarButtonItem] = []
 
-        var barItems: [UIBarButtonItem] = [.flexibleSpace()]
         for item in toolbarConfig {
             guard let id = item["id"] as? String,
                   let iconName = item["icon"] as? String else { continue }
@@ -250,24 +236,25 @@ class ImageViewerRootView: UIView, RootViewType {
                 let menu = UIMenu(children: actions)
                 let btn = UIBarButtonItem(image: image, menu: menu)
                 btn.tintColor = theme.tintColor
-                barItems.append(btn)
+                buttons.append(btn)
             } else {
                 let btn = UIBarButtonItem(
                     image: image,
                     style: .plain,
                     target: self,
-                    action: #selector(toolbarItemTapped(_:))
+                    action: #selector(navBarItemTapped(_:))
                 )
                 btn.tintColor = theme.tintColor
                 btn.accessibilityIdentifier = id
-                barItems.append(btn)
+                buttons.append(btn)
             }
-            barItems.append(.flexibleSpace())
         }
-        bottomToolbar.items = barItems
+
+        // Reverse so the first item in the prop array appears leftmost on screen
+        navItem.rightBarButtonItems = buttons.reversed()
     }
 
-    @objc private func toolbarItemTapped(_ sender: UIBarButtonItem) {
+    @objc private func navBarItemTapped(_ sender: UIBarButtonItem) {
         guard let id = sender.accessibilityIdentifier else { return }
         onToolbarActionCallback?(id, nil, currentIndex)
     }
@@ -302,15 +289,6 @@ class ImageViewerRootView: UIView, RootViewType {
             width: bounds.width - (horizontalPadding * 2),
             height: navBarHeight
         )
-
-        let toolbarHeight: CGFloat = 44
-        let bottomInset = safeAreaInsets.bottom
-        bottomToolbar.frame = CGRect(
-            x: 0,
-            y: bounds.height - toolbarHeight - bottomInset,
-            width: bounds.width,
-            height: toolbarHeight + bottomInset
-        )
     }
 
     @objc private func dismissViewer() {
@@ -321,7 +299,6 @@ class ImageViewerRootView: UIView, RootViewType {
         let targetAlpha: CGFloat = navBar.alpha > 0.5 ? 0.0 : 1.0
         UIView.animate(withDuration: 0.235) {
             self.navBar.alpha = targetAlpha
-            self.bottomToolbar.alpha = targetAlpha
         }
     }
 
@@ -338,13 +315,11 @@ extension ImageViewerRootView: TransitionProvider {
 
 extension ImageViewerRootView: MatchTransitionDelegate {
     func matchedViewFor(transition: MatchTransition, otherView: UIView) -> UIView? {
-        let imageView = currentImageView
-        return imageView
+        return currentImageView
     }
 
     func matchTransitionWillBegin(transition: MatchTransition) {
         navBar.alpha = 0
-        bottomToolbar.alpha = 0
         transition.overlayView?.isHidden = hideBlurOverlay
     }
 }
@@ -405,13 +380,13 @@ extension ImageViewerRootView: UIPageViewControllerDataSource {
         newVC.view.gestureRecognizers?.removeAll(where: { $0 is UIPanGestureRecognizer })
         return newVC
     }
-    
+
     func presentationCount(for pageViewController: UIPageViewController) -> Int {
         guard !hidePageIndicators else { return 0 }
         let count = imageDatasource?.numberOfImages() ?? 0
         return count > 1 ? count : 0
     }
-    
+
     func presentationIndex(for pageViewController: UIPageViewController) -> Int {
         return currentIndex
     }
