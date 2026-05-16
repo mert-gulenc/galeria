@@ -3,7 +3,7 @@
 
 An image viewer for React (+ Native). **It works with any image component - bring your own image component (BYOIC™)**
 
-> This is a fork of [@nandorojo/galeria](https://github.com/nandorojo/galeria) with an added native bottom toolbar for the image viewer.
+> This is a fork of [@nandorojo/galeria](https://github.com/nandorojo/galeria) with native header action buttons for the image viewer.
 
 https://github.com/user-attachments/assets/5062e949-b205-4260-830c-38041cec26db
 
@@ -22,8 +22,8 @@ https://github.com/user-attachments/assets/5062e949-b205-4260-830c-38041cec26db
 - New Architecture (Fabric) – required
 - Supports different images when collapsed and expanded
 - Works with _any image component_
-- **Native bottom toolbar** with action buttons *(new)*
-- **Context menu support** via native `UIMenu` *(new)*
+- **Native header action buttons** — Share, context menu, and more *(new)*
+- **iOS 26 liquid glass** — nav bar and buttons get the glass material automatically *(new)*
 
 For iOS and Android, the implementation uses Swift (`ImageViewer.swift`) and Kotlin (`imageviewer`) respectively.
 
@@ -31,32 +31,34 @@ Web support is a simplified version of the native experience powered by Framer M
 
 ---
 
-## Toolbar (new)
+## Header Items (new)
 
-The `toolbar` prop adds a native `UIToolbar` at the bottom of the full-screen image viewer on iOS. On iOS 26 it automatically picks up the liquid glass material.
+The `headerItems` prop adds native action buttons to the top-right of the full-screen image viewer on iOS. The viewer's navigation bar automatically adopts the iOS 26 liquid glass material. A close button (×) is always shown on the left.
+
+Plain buttons fire an `action` callback immediately on tap. Menu buttons (`isMenu: true`) open a native action sheet with their `menuItems`.
 
 ### Props
 
 ```ts
-interface GaleriaToolbarItem {
+interface GaleriaHeaderItem {
   id: string
-  icon: string           // SF Symbol name (e.g. "square.and.arrow.up")
+  icon: string              // SF Symbol name (e.g. "square.and.arrow.up")
   label?: string
-  isMenu?: boolean       // renders as a context menu button
-  menuItems?: GaleriaToolbarMenuItem[]
+  isMenu?: boolean          // true → tap opens an action sheet with menuItems
+  menuItems?: GaleriaHeaderMenuItem[]
   action?: (currentIndex: number) => void
 }
 
-interface GaleriaToolbarMenuItem {
+interface GaleriaHeaderMenuItem {
   id: string
   label: string
-  icon?: string          // SF Symbol name
-  isDestructive?: boolean
+  icon?: string             // SF Symbol name
+  isDestructive?: boolean   // renders the item in red
   action?: (currentIndex: number) => void
 }
 ```
 
-Action callbacks receive the **current image index** automatically — no need to track it yourself.
+Action callbacks receive the **current image index** — no need to track it yourself.
 
 ### Basic example
 
@@ -65,7 +67,7 @@ import { Galeria } from '@mert-gulenc/galeria'
 
 <Galeria
   urls={urls}
-  toolbar={[
+  headerItems={[
     {
       id: 'share',
       icon: 'square.and.arrow.up',
@@ -73,7 +75,7 @@ import { Galeria } from '@mert-gulenc/galeria'
     },
     {
       id: 'more',
-      icon: 'ellipsis.circle',
+      icon: 'ellipsis',
       isMenu: true,
       menuItems: [
         {
@@ -101,11 +103,11 @@ import { Galeria } from '@mert-gulenc/galeria'
 </Galeria>
 ```
 
-### Full example (Share, Crop, Edit, context menu)
+### Full example (Share + context menu with Save / Delete)
 
 ```tsx
 import { Galeria } from '@mert-gulenc/galeria'
-import { File, Paths } from 'expo-file-system'
+import { File, Paths } from 'expo-file-system/next'
 import * as Haptics from 'expo-haptics'
 import * as MediaLibrary from 'expo-media-library'
 import * as Sharing from 'expo-sharing'
@@ -128,20 +130,22 @@ export default function Gallery({ images }) {
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
   }
 
+  async function handleDelete(index: number) {
+    // your delete logic
+  }
+
   return (
     <Galeria
       urls={urls}
-      toolbar={[
+      headerItems={[
         { id: 'share', icon: 'square.and.arrow.up', action: handleShare },
-        { id: 'crop',  icon: 'crop',                action: (i) => openEditor(i) },
-        { id: 'edit',  icon: 'pencil',              action: (i) => openEditor(i) },
         {
           id: 'more',
-          icon: 'ellipsis.circle',
+          icon: 'ellipsis',
           isMenu: true,
           menuItems: [
             { id: 'save',   label: 'Save to Photos', icon: 'square.and.arrow.down', action: handleSave },
-            { id: 'delete', label: 'Delete', icon: 'trash', isDestructive: true, action: (i) => deleteImage(i) },
+            { id: 'delete', label: 'Delete',          icon: 'trash', isDestructive: true, action: handleDelete },
           ],
         },
       ]}
@@ -156,15 +160,17 @@ export default function Gallery({ images }) {
 }
 ```
 
-### Toolbar behaviour
+### Header item behaviour
 
 | Behaviour | Detail |
 |---|---|
-| Visibility | Shown when viewer opens, hidden on swipe-dismiss start |
-| Toggle | Single tap anywhere on the image shows/hides both toolbar and nav bar |
-| Menu button | Long-press not required — tap shows the `UIMenu` immediately |
-| Destructive items | Rendered in red automatically |
-| Liquid glass | Automatic on iOS 26+ via `UIToolbar` |
+| Layout | Buttons appear right-to-left in the order you pass them (first item is leftmost) |
+| Close button | Always present on the left — no configuration needed |
+| Plain button | Tap fires `action(currentIndex)` immediately |
+| Menu button | Tap opens a native action sheet with the `menuItems` listed |
+| Destructive items | `isDestructive: true` renders the action sheet item in red |
+| Visibility | Shown when viewer opens; single-tap on the image toggles hide/show |
+| Liquid glass | Automatic on iOS 26+ via the navigation bar material |
 | Current index | Passed to every `action` callback — no ref tracking needed |
 
 ---
@@ -280,6 +286,8 @@ export const FlashListSupport = () => (
 
 ```bash
 npm install github:mert-gulenc/galeria
+# or
+bun add git+ssh://git@github.com:mert-gulenc/galeria.git
 ```
 
 ### Expo
@@ -296,7 +304,7 @@ npx expo run:ios
 ## Credits
 
 - Fork of [@nandorojo/galeria](https://github.com/nandorojo/galeria) by [Fernando Rojo](https://github.com/nandorojo)
-- Native toolbar additions by [mert-gulenc](https://github.com/mert-gulenc)
+- Header action buttons & iOS 26 liquid glass by [mert-gulenc](https://github.com/mert-gulenc)
 - iOS image viewer: [Michael Henry – ImageViewer.swift](https://github.com/michaelhenry/ImageViewer.swift)
 - iOS transitions: [Luke Zhao – DynamicTransition](https://github.com/lkzhao/DynamicTransition)
 - Android image viewer: [iielse](https://github.com/iielse/imageviewer)
