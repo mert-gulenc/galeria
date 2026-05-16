@@ -37,6 +37,7 @@ const Galeria = Object.assign(
           hideBlurOverlay: false,
           hidePageIndicators: false,
           closeIconName: undefined,
+          toolbar: undefined,
           urls,
           theme,
           initialIndex: 0,

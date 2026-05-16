@@ -10,4 +10,5 @@ public enum ImageViewerOption {
     case onDismiss(() -> Void)
     case hideBlurOverlay(Bool)
     case hidePageIndicators(Bool)
+    case toolbar([[String: Any]], onTap: (_ buttonId: String, _ menuItemId: String?, _ currentIndex: Int) -> Void)
 }

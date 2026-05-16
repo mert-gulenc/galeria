@@ -3411,9 +3411,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@nandorojo/galeria@workspace:.":
+"@mert-gulenc/galeria@workspace:.":
   version: 0.0.0-use.local
-  resolution: "@nandorojo/galeria@workspace:."
+  resolution: "@mert-gulenc/galeria@workspace:."
   dependencies:
     "@types/node": "npm:^22.7.4"
     "@types/react": "npm:~18.3.12"

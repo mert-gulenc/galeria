@@ -218,6 +218,7 @@ function Root({
         hideBlurOverlay: false,
         hidePageIndicators: false,
         closeIconName: undefined,
+        toolbar: undefined,
         setOpen,
         urls,
         theme,

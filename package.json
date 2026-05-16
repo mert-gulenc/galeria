@@ -1,7 +1,7 @@
 {
-  "name": "@nandorojo/galeria",
-  "version": "2.0.0-alpha.0",
-  "description": "A native galeria.",
+  "name": "@mert-gulenc/galeria",
+  "version": "1.0.0",
+  "description": "A native galeria with toolbar support.",
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "scripts": {

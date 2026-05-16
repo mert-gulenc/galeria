@@ -14,6 +14,16 @@ class ImageViewerRootView: UIView, RootViewType {
     var hideBlurOverlay: Bool = false
     var hidePageIndicators: Bool = false
 
+    private var toolbarConfig: [[String: Any]] = []
+    private var onToolbarActionCallback: ((String, String?, Int) -> Void)?
+
+    private(set) lazy var bottomToolbar: UIToolbar = {
+        let bar = UIToolbar(frame: .zero)
+        bar.isTranslucent = true
+        bar.alpha = 0
+        return bar
+    }()
+
     private var pageViewController: UIPageViewController!
     private(set) lazy var backgroundView: UIView = {
         let view = UIView()
@@ -61,17 +71,20 @@ class ImageViewerRootView: UIView, RootViewType {
 
     func willAppear(animated: Bool) {
         navBar.alpha = 0
+        bottomToolbar.alpha = 0
     }
 
     func didAppear(animated: Bool) {
         UIView.animate(withDuration: 0.25) {
             self.navBar.alpha = 1.0
+            self.bottomToolbar.alpha = 1.0
         }
     }
 
     func willDisappear(animated: Bool) {
         UIView.animate(withDuration: 0.25) {
             self.navBar.alpha = 0
+            self.bottomToolbar.alpha = 0
         }
     }
 
@@ -204,8 +217,59 @@ class ImageViewerRootView: UIView, RootViewType {
                 self.hideBlurOverlay = hide
             case .hidePageIndicators(let hide):
                 self.hidePageIndicators = hide
+            case .toolbar(let items, let onTap):
+                toolbarConfig = items
+                onToolbarActionCallback = onTap
+                setupToolbar()
             }
         }
+    }
+
+    private func setupToolbar() {
+        addSubview(bottomToolbar)
+
+        var barItems: [UIBarButtonItem] = [.flexibleSpace()]
+        for item in toolbarConfig {
+            guard let id = item["id"] as? String,
+                  let iconName = item["icon"] as? String else { continue }
+
+            let isMenu = item["isMenu"] as? Bool ?? false
+            let image = UIImage(systemName: iconName)
+
+            if isMenu, let rawMenuItems = item["menuItems"] as? [[String: Any]] {
+                let actions: [UIAction] = rawMenuItems.compactMap { m in
+                    guard let mid = m["id"] as? String,
+                          let label = m["label"] as? String else { return nil }
+                    let icon = (m["icon"] as? String).flatMap { UIImage(systemName: $0) }
+                    let attrs: UIMenuElement.Attributes =
+                        (m["isDestructive"] as? Bool == true) ? .destructive : []
+                    return UIAction(title: label, image: icon, attributes: attrs) { [weak self] _ in
+                        self?.onToolbarActionCallback?(id, mid, self?.currentIndex ?? 0)
+                    }
+                }
+                let menu = UIMenu(children: actions)
+                let btn = UIBarButtonItem(image: image, menu: menu)
+                btn.tintColor = theme.tintColor
+                barItems.append(btn)
+            } else {
+                let btn = UIBarButtonItem(
+                    image: image,
+                    style: .plain,
+                    target: self,
+                    action: #selector(toolbarItemTapped(_:))
+                )
+                btn.tintColor = theme.tintColor
+                btn.accessibilityIdentifier = id
+                barItems.append(btn)
+            }
+            barItems.append(.flexibleSpace())
+        }
+        bottomToolbar.items = barItems
+    }
+
+    @objc private func toolbarItemTapped(_ sender: UIBarButtonItem) {
+        guard let id = sender.accessibilityIdentifier else { return }
+        onToolbarActionCallback?(id, nil, currentIndex)
     }
 
     private func setupGestures() {
@@ -238,6 +302,15 @@ class ImageViewerRootView: UIView, RootViewType {
             width: bounds.width - (horizontalPadding * 2),
             height: navBarHeight
         )
+
+        let toolbarHeight: CGFloat = 44
+        let bottomInset = safeAreaInsets.bottom
+        bottomToolbar.frame = CGRect(
+            x: 0,
+            y: bounds.height - toolbarHeight - bottomInset,
+            width: bounds.width,
+            height: toolbarHeight + bottomInset
+        )
     }
 
     @objc private func dismissViewer() {
@@ -245,9 +318,10 @@ class ImageViewerRootView: UIView, RootViewType {
     }
 
     @objc private func didSingleTap() {
-        let currentAlpha = navBar.alpha
+        let targetAlpha: CGFloat = navBar.alpha > 0.5 ? 0.0 : 1.0
         UIView.animate(withDuration: 0.235) {
-            self.navBar.alpha = currentAlpha > 0.5 ? 0.0 : 1.0
+            self.navBar.alpha = targetAlpha
+            self.bottomToolbar.alpha = targetAlpha
         }
     }
 
@@ -270,6 +344,7 @@ extension ImageViewerRootView: MatchTransitionDelegate {
 
     func matchTransitionWillBegin(transition: MatchTransition) {
         navBar.alpha = 0
+        bottomToolbar.alpha = 0
         transition.overlayView?.isHidden = hideBlurOverlay
     }
 }
