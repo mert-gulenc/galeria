@@ -233,10 +233,16 @@ class ImageViewerRootView: UIView, RootViewType {
                         self?.onToolbarActionCallback?(id, mid, self?.currentIndex ?? 0)
                     }
                 }
-                let menu = UIMenu(children: actions)
-                let btn = UIBarButtonItem(image: image, menu: menu)
-                btn.tintColor = theme.tintColor
-                buttons.append(btn)
+                // UIBarButtonItem(image:menu:) doesn't present menus reliably in a
+                // standalone UINavigationBar (no UINavigationController backing it).
+                // UIButton with showsMenuAsPrimaryAction=true handles its own presentation.
+                let button = UIButton(type: .system)
+                button.setImage(image, for: .normal)
+                button.tintColor = theme.tintColor
+                button.menu = UIMenu(children: actions)
+                button.showsMenuAsPrimaryAction = true
+                button.frame = CGRect(x: 0, y: 0, width: 44, height: 44)
+                buttons.append(UIBarButtonItem(customView: button))
             } else {
                 let btn = UIBarButtonItem(
                     image: image,
@@ -335,6 +341,20 @@ extension ImageViewerRootView: UIGestureRecognizerDelegate {
         }
         if let scrollView = currentScrollView {
             return scrollView.zoomScale <= scrollView.minimumZoomScale + 0.01
+        }
+        return true
+    }
+
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldReceive touch: UITouch
+    ) -> Bool {
+        // Reject touches that hit the nav bar so bar buttons and custom button menus fire
+        if gestureRecognizer is UITapGestureRecognizer {
+            let location = touch.location(in: self)
+            if navBar.frame.contains(location) {
+                return false
+            }
         }
         return true
     }
