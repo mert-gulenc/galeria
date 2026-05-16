@@ -16,9 +16,10 @@ class ImageViewerRootView: UIView, RootViewType {
 
     private var headerItemsConfig: [[String: Any]] = []
     private var onHeaderActionCallback: ((String, String?, Int) -> Void)?
-    private var rightButtonsContainer: UIView?
-    // menuItems for each button id — populated during buildButtonStack, used in menuButtonTapped
+    // menuItems keyed by button id, populated in buildNavBarRightItems
     private var menuItemsMap: [String: [[String: Any]]] = [:]
+    // weak refs to custom-view UIButtons inside bar items, for popover sourceView
+    private var menuButtonRefs: [String: UIButton] = [:]
 
     private var pageViewController: UIPageViewController!
     private(set) lazy var backgroundView: UIView = {
@@ -71,20 +72,17 @@ class ImageViewerRootView: UIView, RootViewType {
 
     func willAppear(animated: Bool) {
         navBar.alpha = 0
-        rightButtonsContainer?.alpha = 0
     }
 
     func didAppear(animated: Bool) {
         UIView.animate(withDuration: 0.25) {
             self.navBar.alpha = 1.0
-            self.rightButtonsContainer?.alpha = 1.0
         }
     }
 
     func willDisappear(animated: Bool) {
         UIView.animate(withDuration: 0.25) {
             self.navBar.alpha = 0
-            self.rightButtonsContainer?.alpha = 0
         }
     }
 
@@ -219,31 +217,16 @@ class ImageViewerRootView: UIView, RootViewType {
         }
     }
 
-    // Adds header action buttons as direct subviews (not inside UINavigationBar).
+    // Puts header action buttons into navItem.rightBarButtonItems using UIBarButtonItem(customView:).
+    // navBar gets automatic iOS 26 glass effect; our own tap handlers drive action/menu logic.
     private func buildNavBarRightItems() {
-        rightButtonsContainer?.removeFromSuperview()
-        rightButtonsContainer = nil
+        navItem.rightBarButtonItems = nil
         menuItemsMap = [:]
+        menuButtonRefs = [:]
 
         guard !headerItemsConfig.isEmpty else { return }
 
-        let stack = buildButtonStack()
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
-        rightButtonsContainer = stack
-
-        NSLayoutConstraint.activate([
-            stack.trailingAnchor.constraint(equalTo: safeAreaLayoutGuide.trailingAnchor, constant: -8),
-            stack.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor),
-            stack.heightAnchor.constraint(equalToConstant: 44),
-        ])
-    }
-
-    private func buildButtonStack() -> UIStackView {
-        let stack = UIStackView()
-        stack.axis = .horizontal
-        stack.spacing = 4
-        stack.alignment = .center
+        var barItems: [UIBarButtonItem] = []
 
         for item in headerItemsConfig {
             guard let id = item["id"] as? String,
@@ -256,25 +239,21 @@ class ImageViewerRootView: UIView, RootViewType {
             button.setImage(image, for: .normal)
             button.tintColor = theme.tintColor
             button.accessibilityIdentifier = id
-            button.translatesAutoresizingMaskIntoConstraints = false
+            button.frame = CGRect(x: 0, y: 0, width: 44, height: 44)
 
             if isMenu, let rawMenuItems = item["menuItems"] as? [[String: Any]] {
-                // Store menu items and present via UIAlertController on tap —
-                // showsMenuAsPrimaryAction is unreliable without a backing UINavigationController.
                 menuItemsMap[id] = rawMenuItems
+                menuButtonRefs[id] = button
                 button.addTarget(self, action: #selector(menuButtonTapped(_:)), for: .touchUpInside)
             } else {
                 button.addTarget(self, action: #selector(rightButtonTapped(_:)), for: .touchUpInside)
             }
 
-            stack.addArrangedSubview(button)
-            NSLayoutConstraint.activate([
-                button.widthAnchor.constraint(equalToConstant: 44),
-                button.heightAnchor.constraint(equalToConstant: 44),
-            ])
+            barItems.append(UIBarButtonItem(customView: button))
         }
 
-        return stack
+        // UIKit stores rightBarButtonItems right-to-left; reverse so prop order maps left-to-right visually
+        navItem.rightBarButtonItems = barItems.reversed()
     }
 
     @objc private func rightButtonTapped(_ sender: UIButton) {
@@ -314,7 +293,6 @@ class ImageViewerRootView: UIView, RootViewType {
             if let vc = next as? UIViewController { return vc }
             responder = next
         }
-        // Fallback: find the key window's root view controller
         let scene = UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
             .first(where: { $0.activationState == .foregroundActive })
@@ -362,7 +340,6 @@ class ImageViewerRootView: UIView, RootViewType {
         let targetAlpha: CGFloat = navBar.alpha > 0.5 ? 0.0 : 1.0
         UIView.animate(withDuration: 0.235) {
             self.navBar.alpha = targetAlpha
-            self.rightButtonsContainer?.alpha = targetAlpha
         }
     }
 
@@ -384,7 +361,6 @@ extension ImageViewerRootView: MatchTransitionDelegate {
 
     func matchTransitionWillBegin(transition: MatchTransition) {
         navBar.alpha = 0
-        rightButtonsContainer?.alpha = 0
         transition.overlayView?.isHidden = hideBlurOverlay
     }
 }
@@ -394,7 +370,6 @@ extension ImageViewerRootView: UIGestureRecognizerDelegate {
         if gestureRecognizer is UITapGestureRecognizer {
             let location = gestureRecognizer.location(in: self)
             if navBar.frame.contains(location) { return false }
-            if let container = rightButtonsContainer, container.frame.contains(location) { return false }
         }
         if let scrollView = currentScrollView {
             return scrollView.zoomScale <= scrollView.minimumZoomScale + 0.01
@@ -409,7 +384,6 @@ extension ImageViewerRootView: UIGestureRecognizerDelegate {
         if gestureRecognizer is UITapGestureRecognizer {
             let location = touch.location(in: self)
             if navBar.frame.contains(location) { return false }
-            if let container = rightButtonsContainer, container.frame.contains(location) { return false }
         }
         return true
     }
