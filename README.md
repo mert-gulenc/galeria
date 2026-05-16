@@ -3,14 +3,9 @@
 
 An image viewer for React (+ Native). **It works with any image component - bring your own image component (BYOIC™)**
 
-<!-- <video width="300" src="https://github.com/nandorojo/galeria/assets/13172299/5e915a75-bd40-410f-99fb-5df644ce96ad" ></video> -->
-
+> This is a fork of [@nandorojo/galeria](https://github.com/nandorojo/galeria) with an added native bottom toolbar for the image viewer.
 
 https://github.com/user-attachments/assets/5062e949-b205-4260-830c-38041cec26db
-
-> The video makes Web look a bit weird, but don't worry. [Here is why – it's just because of FlashList](https://x.com/FernandoTheRojo/status/1898108643758743882)'s Masonry List, which wraps the views with additional cells breaking z-index. But it isn't a fundamental Galeria issue.
-
-
 
 ## Features
 
@@ -26,33 +21,161 @@ https://github.com/user-attachments/assets/5062e949-b205-4260-830c-38041cec26db
 - Remote URLs & local images
 - New Architecture (Fabric) – required
 - Supports different images when collapsed and expanded
-  - This lets you show smaller thumbnails with higher resolution expanded images
 - Works with _any image component_
-  - `<Image />` from `react-native`
-  - `<SolitoImage />` from `solito/image`
-  - `<Image />` from `next/image`
-  - `<Image />` from `expo-image`
-  - `<img />` on web
-  - ...etc
+- **Native bottom toolbar** with action buttons *(new)*
+- **Context menu support** via native `UIMenu` *(new)*
 
-For iOS and Android, the implementation uses Swift (`ImageViewer.swift`) and Kotlin (`imageviewer`) respectively – see [credits](#credits).
+For iOS and Android, the implementation uses Swift (`ImageViewer.swift`) and Kotlin (`imageviewer`) respectively.
 
-Web support is a simplified version of the native experience powered by Framer Motion. It currently supports a single image at a time.
+Web support is a simplified version of the native experience powered by Framer Motion.
 
-## Resources
+---
 
-- [@FernandoTheRojo's tweet about Galeria v1](https://x.com/FernandoTheRojo/status/1898102430379790606)
-- [Watch my talk at App.js Conf](https://www.youtube.com/watch?v=mG1Lv-RWds8) about how to build Galeria
-  - "Don't be afraid to build a native library"
+## Toolbar (new)
+
+The `toolbar` prop adds a native `UIToolbar` at the bottom of the full-screen image viewer on iOS. On iOS 26 it automatically picks up the liquid glass material.
+
+### Props
+
+```ts
+interface GaleriaToolbarItem {
+  id: string
+  icon: string           // SF Symbol name (e.g. "square.and.arrow.up")
+  label?: string
+  isMenu?: boolean       // renders as a context menu button
+  menuItems?: GaleriaToolbarMenuItem[]
+  action?: (currentIndex: number) => void
+}
+
+interface GaleriaToolbarMenuItem {
+  id: string
+  label: string
+  icon?: string          // SF Symbol name
+  isDestructive?: boolean
+  action?: (currentIndex: number) => void
+}
+```
+
+Action callbacks receive the **current image index** automatically — no need to track it yourself.
+
+### Basic example
+
+```tsx
+import { Galeria } from '@mert-gulenc/galeria'
+
+<Galeria
+  urls={urls}
+  toolbar={[
+    {
+      id: 'share',
+      icon: 'square.and.arrow.up',
+      action: (index) => shareImage(urls[index]),
+    },
+    {
+      id: 'more',
+      icon: 'ellipsis.circle',
+      isMenu: true,
+      menuItems: [
+        {
+          id: 'save',
+          label: 'Save to Photos',
+          icon: 'square.and.arrow.down',
+          action: (index) => saveToLibrary(urls[index]),
+        },
+        {
+          id: 'delete',
+          label: 'Delete',
+          icon: 'trash',
+          isDestructive: true,
+          action: (index) => deleteImage(index),
+        },
+      ],
+    },
+  ]}
+>
+  {urls.map((url, index) => (
+    <Galeria.Image index={index} key={url}>
+      <Image source={{ uri: url }} style={{ width: 100, height: 100 }} />
+    </Galeria.Image>
+  ))}
+</Galeria>
+```
+
+### Full example (Share, Crop, Edit, context menu)
+
+```tsx
+import { Galeria } from '@mert-gulenc/galeria'
+import { File, Paths } from 'expo-file-system'
+import * as Haptics from 'expo-haptics'
+import * as MediaLibrary from 'expo-media-library'
+import * as Sharing from 'expo-sharing'
+
+export default function Gallery({ images }) {
+  const urls = images.map((img) => img.url)
+
+  async function handleShare(index: number) {
+    const file = new File(Paths.cache, `img_${index}.jpg`)
+    if (!file.exists) await File.downloadFileAsync(urls[index], file)
+    await Sharing.shareAsync(file.uri, { mimeType: 'image/jpeg' })
+  }
+
+  async function handleSave(index: number) {
+    const { status } = await MediaLibrary.requestPermissionsAsync()
+    if (status !== 'granted') return
+    const file = new File(Paths.cache, `img_${index}.jpg`)
+    if (!file.exists) await File.downloadFileAsync(urls[index], file)
+    await MediaLibrary.saveToLibraryAsync(file.uri)
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+  }
+
+  return (
+    <Galeria
+      urls={urls}
+      toolbar={[
+        { id: 'share', icon: 'square.and.arrow.up', action: handleShare },
+        { id: 'crop',  icon: 'crop',                action: (i) => openEditor(i) },
+        { id: 'edit',  icon: 'pencil',              action: (i) => openEditor(i) },
+        {
+          id: 'more',
+          icon: 'ellipsis.circle',
+          isMenu: true,
+          menuItems: [
+            { id: 'save',   label: 'Save to Photos', icon: 'square.and.arrow.down', action: handleSave },
+            { id: 'delete', label: 'Delete', icon: 'trash', isDestructive: true, action: (i) => deleteImage(i) },
+          ],
+        },
+      ]}
+    >
+      {urls.map((url, index) => (
+        <Galeria.Image index={index} key={url}>
+          <Image source={{ uri: url }} style={{ width: 100, height: 100 }} />
+        </Galeria.Image>
+      ))}
+    </Galeria>
+  )
+}
+```
+
+### Toolbar behaviour
+
+| Behaviour | Detail |
+|---|---|
+| Visibility | Shown when viewer opens, hidden on swipe-dismiss start |
+| Toggle | Single tap anywhere on the image shows/hides both toolbar and nav bar |
+| Menu button | Long-press not required — tap shows the `UIMenu` immediately |
+| Destructive items | Rendered in red automatically |
+| Liquid glass | Automatic on iOS 26+ via `UIToolbar` |
+| Current index | Passed to every `action` callback — no ref tracking needed |
+
+---
 
 ## Usage
-
 
 ### One Image
 
 ```tsx
-import { Galeria } from '@nandorojo/galeria'
-import { Image } from 'react-native' // works with ANY image component!
+import { Galeria } from '@mert-gulenc/galeria'
+import { Image } from 'react-native'
 
 const url = 'https://my-image.com/image.jpg'
 
@@ -67,35 +190,19 @@ export const SingleImage = ({ style }) => (
 
 ### Multiple Images
 
-Simply pass an array to `urls`.
-
 ```tsx
-import { Galeria } from '@nandorojo/galeria'
-import { Image } from 'react-native' // works with ANY image component!
+import { Galeria } from '@mert-gulenc/galeria'
+import { Image } from 'react-native'
 
-import localImage from './assets/local-image.png'
+const urls = ['https://my-image.com/image.jpg', 'https://my-image.com/image2.jpg']
 
-const urls = ['https://my-image.com/image.jpg', localImage]
-
-export const MutliImage = ({ style }) => (
+export const MultiImage = ({ style }) => (
   <Galeria urls={urls}>
     {urls.map((url, index) => (
-       <Galeria.Image index={index} key={...}>
-         <Image source={typeof url === 'string' ? { uri: url } : url} style={style} />
-       </Galeria.Image>
-     ))}
-  </Galeria>
-)
-```
-
-### Dark Mode
-
-```tsx
-import { Galeria } from '@nandorojo/galeria'
-
-export const DarkMode = () => (
-  <Galeria urls={urls} theme="dark">
-    ...
+      <Galeria.Image index={index} key={url}>
+        <Image source={{ uri: url }} style={style} />
+      </Galeria.Image>
+    ))}
   </Galeria>
 )
 ```
@@ -103,63 +210,50 @@ export const DarkMode = () => (
 ### FlashList
 
 ```tsx
-import { Galeria } from '@nandorojo/galeria'
-import { Image, type ImageAssetSource } from 'react-native' // works with ANY image component!
+import { Galeria } from '@mert-gulenc/galeria'
+import { Image } from 'react-native'
 import { FlashList } from '@shopify/flash-list'
 
-import localImage from './assets/local-image.png'
-
-const urls = ['https://my-image.com/image.jpg', localImage]
+const urls = ['https://my-image.com/image.jpg', 'https://my-image.com/image2.jpg']
 const size = 100
-export const FlashListSupport = () => {
-  return (
-    <Galeria urls={urls}>
-      <FlashList
-        data={urls}
-        renderItem={({ item, index }) => {
-          // you should put this in a memoized component
-          return (
-            <Galeria.Image index={index}>
-              <Image
-                source={src(item)}
-                style={{ width: size, height: size }}
-              />
-            </Galeria.Image>
-          )
-        }}
-        numColumns={3}
-        estimatedItemSize={size}
-        keyExtractor={(item, i) => item + i}
-      />
-    </Galeria>
-  )
-}
 
-const src = (s) => (typeof s === 'string' ? { uri: s } : s) // 🤷‍♂️
+export const FlashListSupport = () => (
+  <Galeria urls={urls}>
+    <FlashList
+      data={urls}
+      renderItem={({ item, index }) => (
+        <Galeria.Image index={index}>
+          <Image source={{ uri: item }} style={{ width: size, height: size }} />
+        </Galeria.Image>
+      )}
+      numColumns={3}
+      estimatedItemSize={size}
+      keyExtractor={(item, i) => item + i}
+    />
+  </Galeria>
+)
 ```
 
-### Get Index of Currently Shown Image
-*iOS & Android*
-
-To get the index of the currently shown image in the image viewer use `onIndexChange`. It triggers on initial open of the image viewer and when the user scrolls through the images. 
+### Dark Mode
 
 ```tsx
-<Galeria urls={urls}>
-  {urls.map((url, index) => (
-     <Galeria.Image 
-        index={index} key={...}  
-        onIndexChange={(e) => setCurrentIndex(e.nativeEvent.currentIndex)}
-        >
-       <Image source={typeof url === 'string' ? { uri: url } : url} style={style} />
-     </Galeria.Image>
-   ))}
+<Galeria urls={urls} theme="dark">
+  ...
 </Galeria>
 ```
 
-### Hide Blur Overlay
-*iOS only*
+### Get Index of Currently Shown Image
 
-Hide the blur overlay that appears behind the image viewer.
+```tsx
+<Galeria.Image
+  index={index}
+  onIndexChange={(e) => setCurrentIndex(e.nativeEvent.currentIndex)}
+>
+  <Image source={{ uri: url }} style={style} />
+</Galeria.Image>
+```
+
+### Hide Blur Overlay *(iOS)*
 
 ```tsx
 <Galeria.Image hideBlurOverlay>
@@ -167,10 +261,7 @@ Hide the blur overlay that appears behind the image viewer.
 </Galeria.Image>
 ```
 
-### Hide Page Indicators
-*iOS only*
-
-Hide the page indicator dots when viewing multiple images.
+### Hide Page Indicators *(iOS)*
 
 ```tsx
 <Galeria.Image hidePageIndicators>
@@ -178,130 +269,36 @@ Hide the page indicator dots when viewing multiple images.
 </Galeria.Image>
 ```
 
-### Plain Web Support
-
-Galeria does not use _any_ React Native code on the web. It is a pure React component library.
-
-So you can even use `<img />` if you want to only use it on web.
-
-```tsx
-import { Galeria } from '@nandorojo/galeria'
-
-const urls = ['https://my-image.com/image.jpg']
-
-export const WebSupport = () => (
-  <Galeria urls={urls}>
-    <Galeria.Image>
-      <img src={urls[0]} width={100} height={100} />
-    </Galeria.Image>
-  </Galeria>
-)
-```
-
-### Solito Image
-
-```tsx
-import { SolitoImage } from 'solito/image'
-
-const urls = ['https://my-image.com/image.jpg']
-
-export const SolitoSupport = () => (
-  <Galeria urls={urls}>
-    <Galeria.Image>
-      <SolitoImage src={urls[0]} />
-    </Galeria.Image>
-  </Galeria>
-)
-```
-
-### Next.js Image
-
-```tsx
-'use client'
-import { Galeria } from '@nandorojo/galeria'
-import Image from 'next/image'
-
-const urls = ['https://my-image.com/image.jpg']
-
-export const NextJS = () => (
-  <Galeria urls={urls}>
-    <Galeria.Image>
-      <Image
-        src={urls[0]}
-        width={100}
-        height={100}
-        // edit these props for your use case
-        unoptimized
-      />
-    </Galeria.Image>
-  </Galeria>
-)
-```
-
-### Expo Image
-
-```tsx
-import { Galeria } from '@nandorojo/galeria'
-import { Image } from 'expo-image'
-
-const urls = ['https://my-image.com/image.jpg']
-
-export const ExpoImage = () => (
-  <Galeria urls={urls}>
-    <Galeria.Image>
-      <Image source={urls[0]} style={{ width: 100, height: 100 }} />
-    </Galeria.Image>
-  </Galeria>
-)
-```
+---
 
 ## Installation
 
 ### Requirements
 
-- **New Architecture (Fabric)** – Galeria v3.0+ requires the new architecture. This means Expo SDK 54+ or React Native 0.79+.
+- **New Architecture (Fabric)** – requires Expo SDK 54+ or React Native 0.79+
 - **iOS 16+**
 
-For iOS 16+ deployment target:
-- Bare RN: set it in `ios/Podfile`
-- Expo: set it via [`expo-build-properties`](https://docs.expo.dev/versions/latest/sdk/build-properties/)
-
 ```bash
-yarn add @nandorojo/galeria
-
-# or
-
-npm i @nandorojo/galeria
-```
-
-### Next.js / Solito
-
-Add `@nandorojo/galeria` to `transpilePackages` in your `next.config.js`.
-
-```tsx
-module.exports = {
-  transpilePackages: ['@nandorojo/galeria'],
-}
+npm install github:mert-gulenc/galeria
 ```
 
 ### Expo
 
-Galeria uses native libraries on iOS and Android, so it does not work with Expo Go. You will need to use a dev client.
-
-After installing it, rebuild your native code:
+Galeria uses native libraries, so it does not work with Expo Go. Use a dev client.
 
 ```bash
 npx expo prebuild
-npx expo run:ios # or npx expo run:android
+npx expo run:ios
 ```
+
+---
 
 ## Credits
 
-- Under the hood, Galeria uses native libraries on iOS and Android.
-- On Web, Galeria uses Framer Motion.
-- Thanks to [Luke Zhao](https://github.com/lkzhao/DynamicTransition) for DynamicTransition
-- Thanks to [Michael Henry](https://github.com/michaelhenry/ImageViewer.swift) for the iOS Image Viewer
-- Thanks to [iielse](https://github.com/iielse/imageviewer) for the Android Image Viewer
-- Thanks to [Alan](https://github.com/alantoa) for building the Android integration.
-
-<img width="1728" alt="Screenshot 2024-05-23 at 1 02 03 PM" src="https://github.com/nandorojo/galeria/assets/13172299/d43f4d04-3510-47fa-8c1d-93cb01644d38">
+- Fork of [@nandorojo/galeria](https://github.com/nandorojo/galeria) by [Fernando Rojo](https://github.com/nandorojo)
+- Native toolbar additions by [mert-gulenc](https://github.com/mert-gulenc)
+- iOS image viewer: [Michael Henry – ImageViewer.swift](https://github.com/michaelhenry/ImageViewer.swift)
+- iOS transitions: [Luke Zhao – DynamicTransition](https://github.com/lkzhao/DynamicTransition)
+- Android image viewer: [iielse](https://github.com/iielse/imageviewer)
+- Android integration: [Alan](https://github.com/alantoa)
+- Web animations: [Framer Motion](https://www.framer.com/motion/)
