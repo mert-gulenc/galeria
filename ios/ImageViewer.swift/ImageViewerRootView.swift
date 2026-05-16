@@ -16,6 +16,7 @@ class ImageViewerRootView: UIView, RootViewType {
 
     private var headerItemsConfig: [[String: Any]] = []
     private var onHeaderActionCallback: ((String, String?, Int) -> Void)?
+    private var rightButtonsStack: UIStackView?
 
     private var pageViewController: UIPageViewController!
     private(set) lazy var backgroundView: UIView = {
@@ -64,17 +65,20 @@ class ImageViewerRootView: UIView, RootViewType {
 
     func willAppear(animated: Bool) {
         navBar.alpha = 0
+        rightButtonsStack?.alpha = 0
     }
 
     func didAppear(animated: Bool) {
         UIView.animate(withDuration: 0.25) {
             self.navBar.alpha = 1.0
+            self.rightButtonsStack?.alpha = 1.0
         }
     }
 
     func willDisappear(animated: Bool) {
         UIView.animate(withDuration: 0.25) {
             self.navBar.alpha = 0
+            self.rightButtonsStack?.alpha = 0
         }
     }
 
@@ -209,70 +213,69 @@ class ImageViewerRootView: UIView, RootViewType {
         }
     }
 
-    // Builds rightBarButtonItems from the headerItems config.
-    // Items appear left→right on screen; UIKit rightBarButtonItems are stored right→left,
-    // so we reverse the built array before assigning.
+    // Adds header action buttons as direct subviews of this view (not inside UINavigationBar).
+    // UIButton.showsMenuAsPrimaryAction requires being in a proper view hierarchy to present
+    // menus — UIBarButtonItem inside a standalone UINavigationBar doesn't satisfy that.
     private func buildNavBarRightItems() {
-        NSLog("[Galeria] buildNavBarRightItems called with %d items", headerItemsConfig.count)
-        var buttons: [UIBarButtonItem] = []
+        rightButtonsStack?.removeFromSuperview()
+        rightButtonsStack = nil
+
+        guard !headerItemsConfig.isEmpty else { return }
+
+        let stack = UIStackView()
+        stack.axis = .horizontal
+        stack.spacing = 0
+        stack.alignment = .center
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+        rightButtonsStack = stack
 
         for item in headerItemsConfig {
             guard let id = item["id"] as? String,
-                  let iconName = item["icon"] as? String else {
-                NSLog("[Galeria] buildNavBarRightItems: skipping item missing id or icon: %@", item.description)
-                continue
-            }
+                  let iconName = item["icon"] as? String else { continue }
 
             let isMenu = item["isMenu"] as? Bool ?? false
             let image = UIImage(systemName: iconName)
-            NSLog("[Galeria] buildNavBarRightItems: id=%@ icon=%@ isMenu=%d imageFound=%d", id, iconName, isMenu ? 1 : 0, image != nil ? 1 : 0)
+
+            let button = UIButton(type: .system)
+            button.setImage(image, for: .normal)
+            button.tintColor = theme.tintColor
+            button.translatesAutoresizingMaskIntoConstraints = false
 
             if isMenu, let rawMenuItems = item["menuItems"] as? [[String: Any]] {
-                NSLog("[Galeria] buildNavBarRightItems: building menu with %d items for id=%@", rawMenuItems.count, id)
                 let actions: [UIAction] = rawMenuItems.compactMap { m in
                     guard let mid = m["id"] as? String,
                           let label = m["label"] as? String else { return nil }
                     let icon = (m["icon"] as? String).flatMap { UIImage(systemName: $0) }
                     let attrs: UIMenuElement.Attributes =
                         (m["isDestructive"] as? Bool == true) ? .destructive : []
-                    NSLog("[Galeria] buildNavBarRightItems: menu action id=%@ label=%@", mid, label)
                     return UIAction(title: label, image: icon, attributes: attrs) { [weak self] _ in
-                        NSLog("[Galeria] UIAction fired: buttonId=%@ menuItemId=%@ index=%d", id, mid, self?.currentIndex ?? 0)
                         self?.onHeaderActionCallback?(id, mid, self?.currentIndex ?? 0)
                     }
                 }
-                // UIBarButtonItem(image:menu:) doesn't present menus reliably in a
-                // standalone UINavigationBar (no UINavigationController backing it).
-                // UIButton with showsMenuAsPrimaryAction=true handles its own presentation.
-                let button = UIButton(type: .system)
-                button.setImage(image, for: .normal)
-                button.tintColor = theme.tintColor
                 button.menu = UIMenu(children: actions)
                 button.showsMenuAsPrimaryAction = true
-                button.frame = CGRect(x: 0, y: 0, width: 44, height: 44)
-                NSLog("[Galeria] buildNavBarRightItems: created UIButton with menu for id=%@, frame=%@", id, NSCoder.string(for: button.frame))
-                buttons.append(UIBarButtonItem(customView: button))
             } else {
-                let btn = UIBarButtonItem(
-                    image: image,
-                    style: .plain,
-                    target: self,
-                    action: #selector(navBarItemTapped(_:))
-                )
-                btn.tintColor = theme.tintColor
-                btn.accessibilityIdentifier = id
-                buttons.append(btn)
+                button.accessibilityIdentifier = id
+                button.addTarget(self, action: #selector(rightButtonTapped(_:)), for: .touchUpInside)
             }
+
+            stack.addArrangedSubview(button)
+            NSLayoutConstraint.activate([
+                button.widthAnchor.constraint(equalToConstant: 44),
+                button.heightAnchor.constraint(equalToConstant: 44),
+            ])
         }
 
-        NSLog("[Galeria] buildNavBarRightItems: setting %d rightBarButtonItems", buttons.count)
-        // Reverse so the first item in the prop array appears leftmost on screen
-        navItem.rightBarButtonItems = buttons.reversed()
+        NSLayoutConstraint.activate([
+            stack.trailingAnchor.constraint(equalTo: safeAreaLayoutGuide.trailingAnchor, constant: -8),
+            stack.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor),
+            stack.heightAnchor.constraint(equalToConstant: 44),
+        ])
     }
 
-    @objc private func navBarItemTapped(_ sender: UIBarButtonItem) {
+    @objc private func rightButtonTapped(_ sender: UIButton) {
         guard let id = sender.accessibilityIdentifier else { return }
-        NSLog("[Galeria] navBarItemTapped: id=%@ index=%d", id, currentIndex)
         onHeaderActionCallback?(id, nil, currentIndex)
     }
 
@@ -316,6 +319,7 @@ class ImageViewerRootView: UIView, RootViewType {
         let targetAlpha: CGFloat = navBar.alpha > 0.5 ? 0.0 : 1.0
         UIView.animate(withDuration: 0.235) {
             self.navBar.alpha = targetAlpha
+            self.rightButtonsStack?.alpha = targetAlpha
         }
     }
 
@@ -337,21 +341,17 @@ extension ImageViewerRootView: MatchTransitionDelegate {
 
     func matchTransitionWillBegin(transition: MatchTransition) {
         navBar.alpha = 0
+        rightButtonsStack?.alpha = 0
         transition.overlayView?.isHidden = hideBlurOverlay
     }
 }
 
 extension ImageViewerRootView: UIGestureRecognizerDelegate {
     override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-        // Don't intercept taps that land on the nav bar — lets UIBarButtonItem menus fire
         if gestureRecognizer is UITapGestureRecognizer {
             let location = gestureRecognizer.location(in: self)
-            let inNavBar = navBar.frame.contains(location)
-            NSLog("[Galeria] gestureRecognizerShouldBegin: tapGesture location=%@ navBar.frame=%@ inNavBar=%d → shouldBegin=%d",
-                  NSCoder.string(for: location), NSCoder.string(for: navBar.frame), inNavBar ? 1 : 0, inNavBar ? 0 : 1)
-            if inNavBar {
-                return false
-            }
+            if navBar.frame.contains(location) { return false }
+            if let stack = rightButtonsStack, stack.frame.contains(location) { return false }
         }
         if let scrollView = currentScrollView {
             return scrollView.zoomScale <= scrollView.minimumZoomScale + 0.01
@@ -363,15 +363,10 @@ extension ImageViewerRootView: UIGestureRecognizerDelegate {
         _ gestureRecognizer: UIGestureRecognizer,
         shouldReceive touch: UITouch
     ) -> Bool {
-        // Reject touches that hit the nav bar so bar buttons and custom button menus fire
         if gestureRecognizer is UITapGestureRecognizer {
             let location = touch.location(in: self)
-            let inNavBar = navBar.frame.contains(location)
-            NSLog("[Galeria] shouldReceive(touch): location=%@ navBar.frame=%@ inNavBar=%d → shouldReceive=%d",
-                  NSCoder.string(for: location), NSCoder.string(for: navBar.frame), inNavBar ? 1 : 0, inNavBar ? 0 : 1)
-            if inNavBar {
-                return false
-            }
+            if navBar.frame.contains(location) { return false }
+            if let stack = rightButtonsStack, stack.frame.contains(location) { return false }
         }
         return true
     }
