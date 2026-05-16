@@ -16,8 +16,9 @@ class ImageViewerRootView: UIView, RootViewType {
 
     private var headerItemsConfig: [[String: Any]] = []
     private var onHeaderActionCallback: ((String, String?, Int) -> Void)?
-    // Outermost container for right-side buttons (glass pill on iOS 26+, plain stack otherwise)
     private var rightButtonsContainer: UIView?
+    // menuItems for each button id — populated during buildButtonStack, used in menuButtonTapped
+    private var menuItemsMap: [String: [[String: Any]]] = [:]
 
     private var pageViewController: UIPageViewController!
     private(set) lazy var backgroundView: UIView = {
@@ -219,54 +220,29 @@ class ImageViewerRootView: UIView, RootViewType {
     }
 
     // Adds header action buttons as direct subviews (not inside UINavigationBar).
-    // On iOS 26+ wraps them in a UIGlassEffect pill for liquid glass styling.
     private func buildNavBarRightItems() {
         rightButtonsContainer?.removeFromSuperview()
         rightButtonsContainer = nil
+        menuItemsMap = [:]
 
         guard !headerItemsConfig.isEmpty else { return }
 
         let stack = buildButtonStack()
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+        rightButtonsContainer = stack
 
-        if #available(iOS 26, *) {
-            let glassEffect = UIGlassEffect()
-            let pill = UIVisualEffectView(effect: glassEffect)
-            pill.layer.cornerRadius = 20
-            pill.layer.masksToBounds = true
-            pill.translatesAutoresizingMaskIntoConstraints = false
-            addSubview(pill)
-            rightButtonsContainer = pill
-
-            stack.translatesAutoresizingMaskIntoConstraints = false
-            pill.contentView.addSubview(stack)
-
-            NSLayoutConstraint.activate([
-                stack.topAnchor.constraint(equalTo: pill.contentView.topAnchor),
-                stack.bottomAnchor.constraint(equalTo: pill.contentView.bottomAnchor),
-                stack.leadingAnchor.constraint(equalTo: pill.contentView.leadingAnchor, constant: 4),
-                stack.trailingAnchor.constraint(equalTo: pill.contentView.trailingAnchor, constant: -4),
-
-                pill.trailingAnchor.constraint(equalTo: safeAreaLayoutGuide.trailingAnchor, constant: -12),
-                pill.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: 4),
-                pill.heightAnchor.constraint(equalToConstant: 40),
-            ])
-        } else {
-            stack.translatesAutoresizingMaskIntoConstraints = false
-            addSubview(stack)
-            rightButtonsContainer = stack
-
-            NSLayoutConstraint.activate([
-                stack.trailingAnchor.constraint(equalTo: safeAreaLayoutGuide.trailingAnchor, constant: -8),
-                stack.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor),
-                stack.heightAnchor.constraint(equalToConstant: 44),
-            ])
-        }
+        NSLayoutConstraint.activate([
+            stack.trailingAnchor.constraint(equalTo: safeAreaLayoutGuide.trailingAnchor, constant: -8),
+            stack.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor),
+            stack.heightAnchor.constraint(equalToConstant: 44),
+        ])
     }
 
     private func buildButtonStack() -> UIStackView {
         let stack = UIStackView()
         stack.axis = .horizontal
-        stack.spacing = 0
+        stack.spacing = 4
         stack.alignment = .center
 
         for item in headerItemsConfig {
@@ -279,30 +255,22 @@ class ImageViewerRootView: UIView, RootViewType {
             let button = UIButton(type: .system)
             button.setImage(image, for: .normal)
             button.tintColor = theme.tintColor
+            button.accessibilityIdentifier = id
             button.translatesAutoresizingMaskIntoConstraints = false
 
             if isMenu, let rawMenuItems = item["menuItems"] as? [[String: Any]] {
-                let actions: [UIAction] = rawMenuItems.compactMap { m in
-                    guard let mid = m["id"] as? String,
-                          let label = m["label"] as? String else { return nil }
-                    let icon = (m["icon"] as? String).flatMap { UIImage(systemName: $0) }
-                    let attrs: UIMenuElement.Attributes =
-                        (m["isDestructive"] as? Bool == true) ? .destructive : []
-                    return UIAction(title: label, image: icon, attributes: attrs) { [weak self] _ in
-                        self?.onHeaderActionCallback?(id, mid, self?.currentIndex ?? 0)
-                    }
-                }
-                button.menu = UIMenu(children: actions)
-                button.showsMenuAsPrimaryAction = true
+                // Store menu items and present via UIAlertController on tap —
+                // showsMenuAsPrimaryAction is unreliable without a backing UINavigationController.
+                menuItemsMap[id] = rawMenuItems
+                button.addTarget(self, action: #selector(menuButtonTapped(_:)), for: .touchUpInside)
             } else {
-                button.accessibilityIdentifier = id
                 button.addTarget(self, action: #selector(rightButtonTapped(_:)), for: .touchUpInside)
             }
 
             stack.addArrangedSubview(button)
             NSLayoutConstraint.activate([
-                button.widthAnchor.constraint(equalToConstant: 40),
-                button.heightAnchor.constraint(equalToConstant: 40),
+                button.widthAnchor.constraint(equalToConstant: 44),
+                button.heightAnchor.constraint(equalToConstant: 44),
             ])
         }
 
@@ -312,6 +280,45 @@ class ImageViewerRootView: UIView, RootViewType {
     @objc private func rightButtonTapped(_ sender: UIButton) {
         guard let id = sender.accessibilityIdentifier else { return }
         onHeaderActionCallback?(id, nil, currentIndex)
+    }
+
+    @objc private func menuButtonTapped(_ sender: UIButton) {
+        guard let id = sender.accessibilityIdentifier,
+              let items = menuItemsMap[id],
+              let vc = findPresentingViewController() else { return }
+
+        let alert = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
+        for item in items {
+            let mid = item["id"] as? String ?? ""
+            let label = item["label"] as? String ?? ""
+            let isDestructive = item["isDestructive"] as? Bool ?? false
+            let style: UIAlertAction.Style = isDestructive ? .destructive : .default
+            alert.addAction(UIAlertAction(title: label, style: style) { [weak self] _ in
+                self?.onHeaderActionCallback?(id, mid, self?.currentIndex ?? 0)
+            })
+        }
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+
+        if let popover = alert.popoverPresentationController {
+            popover.sourceView = sender
+            popover.sourceRect = sender.bounds
+            popover.permittedArrowDirections = .up
+        }
+
+        vc.present(alert, animated: true)
+    }
+
+    private func findPresentingViewController() -> UIViewController? {
+        var responder: UIResponder? = self
+        while let next = responder?.next {
+            if let vc = next as? UIViewController { return vc }
+            responder = next
+        }
+        // Fallback: find the key window's root view controller
+        let scene = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first(where: { $0.activationState == .foregroundActive })
+        return scene?.windows.first(where: { $0.isKeyWindow })?.rootViewController
     }
 
     private func setupGestures() {
