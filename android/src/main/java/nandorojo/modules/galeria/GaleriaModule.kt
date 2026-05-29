@@ -19,7 +19,8 @@ class GaleriaModule : Module() {
             Events(
                 "onIndexChange",
                 "onLongPress",
-                "onDismiss"
+                "onDismiss",
+                "onHeaderAction"
             )
             // Defines a setter for the `name` prop.
             Prop("theme") { view: GaleriaView, theme: Theme ->
@@ -42,6 +43,9 @@ class GaleriaModule : Module() {
             }
             Prop("transitionOffsetX") { view: GaleriaView, transitionOffsetX: Int? ->
                 view.transitionOffsetX = transitionOffsetX
+            }
+            Prop("headerItems") { view: GaleriaView, headerItems: List<Map<String, Any>> ->
+                view.headerItems = headerItems
             }
         }
     }

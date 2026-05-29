@@ -28,6 +28,7 @@ import com.github.iielse.imageviewer.core.Transformer
 import com.github.iielse.imageviewer.core.ViewerCallback
 import com.github.iielse.imageviewer.utils.Config
 import expo.modules.kotlin.viewevent.EventDispatcher
+import expo.modules.kotlin.types.Enumerable
 
 
 class StringPhoto(private val id: Long, private val data: String) : Photo {
@@ -58,6 +59,8 @@ class GaleriaView(context: Context) : ViewGroup(context) {
     var edgeToEdge = false
     var transitionOffsetY: Int? = null
     var transitionOffsetX: Int? = 0
+    var headerItems: List<Map<String, Any>>? = null
+    val onHeaderAction by EventDispatcher()
     val viewModel: ImageViewerActionViewModel by lazy {
         ViewModelProvider(getViewModelOwner(context)).get(ImageViewerActionViewModel::class.java)
     }
@@ -119,7 +122,21 @@ class GaleriaView(context: Context) : ViewGroup(context) {
                     override fun build() = EdgeToEdgeImageViewerDialogFragment(
                         isAppearanceLightSystemBars =
                             if (edgeToEdge) theme.toAppearanceLightSystemBars() else null,
-                        onDismissCallback = { onDismiss(emptyMap<String, Any>()) },
+                        onDismissCallback = {
+                            onDismiss(emptyMap<String, Any>())
+                            childView.post {
+                                childView.animate().cancel()
+                                childView.alpha = 1f
+                            }
+                        },
+                        headerItems = headerItems,
+                        onHeaderActionCallback = { buttonId, menuItemId, currentIndex ->
+                            onHeaderAction(mapOf<String, Any?>(
+                                "buttonId" to buttonId,
+                                "menuItemId" to menuItemId,
+                                "currentIndex" to currentIndex
+                            ) as Map<String, Any>)
+                        }
                     )
                 })
                 childView.setOnClickListener {
@@ -198,7 +215,7 @@ class CustomViewerCallback(private val childView: ImageView, private val onIndex
     }
 }
 
-enum class Theme(val value: String) {
+enum class Theme(val value: String) : Enumerable {
     Dark("dark"),
     Light("light");
 
